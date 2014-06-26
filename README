@@ -1,0 +1,6 @@
+This is a JAVA application that connects to a MikroTik RouterOS installation over SSH, and generates a JSON file containing the different menus, commands and arguments.
+
+Other applications could use the generated JSON to generate for example syntax highlighting and completion suggestions for IDEs that edit ".rsc" files, or perhaps use it to do some trivial error checking of commands, be they scripting commands, or perhaps even API command calls (as long as the menu/command/argument is not API specific, obviously).
+
+
+This application was originally written as a class assignment, successfully completed by Georgi Chakarov (geochak at gmail dot com).
