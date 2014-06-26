@@ -1,0 +1,84 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "description": "schema for the generated files",
+    "$ref": "#/definitions/MenuItem",
+    "definitions": {
+        "MenuItem": {
+            "description": "Represents each menu, including the root menu.",
+            "type": "object",
+            "required": ["name", "summary", "submenus", "commands"],
+            "properties": {
+                "name": {
+                    "description": "Name of the command",
+                    "type": "string"
+                },
+                "summary": {
+                    "description": "A summary of the menu, as seen in the list of its parent menu.",
+                    "type": "string"
+                },
+                "submenus": {
+                    "description": "Submenus of this menu.",
+                    "type": "array",
+                    "minItems": 0,
+                    "items": {
+                        "$ref": "#/definitions/MenuItem"
+                    }
+                },
+                "commands": {
+                    "description": "Commands in this menu.",
+                    "type": "array",
+                    "minItems": 0,
+                    "items": {
+                        "$ref": "#/definitions/Command"
+                    }
+                }
+            }
+        },
+        "Command": {
+            "description": "Represents each command.",
+            "type": "object",
+            "required": ["name", "summary", "arguments"],
+            "properties": {
+                "name": {
+                    "description": "Name of this command.",
+                    "type": "string"
+                },
+                "summary": {
+                    "description": "A summary of the command, as seen in the help for the menu this command belongs to.",
+                    "type": "string"
+                },
+                "arguments": {
+                    "description": "Arguments that this command may take.",
+                    "type": "array",
+                    "minItems": 0,
+                    "items": {
+                        "$ref": "#/definitions/Argument"
+                    }
+                }
+            }
+        },
+        "Argument": {
+            "description": "Represents each command argument.",
+            "type": "object",
+            "required": ["name", "summary", "empty", "keyword"],
+            "properties": {
+                "name": {
+                    "description": "Name of the argument",
+                    "type": "string"
+                },
+                "summary": {
+                    "description": "Summary of the argument, as seen in the help for the command this argument belongs to.",
+                    "type": "string"
+                },
+                "unnamed": {
+                    "description": "Specifies whether this argument's name can be omitted when using it from the command line.",
+                    "type": "boolean"
+                },
+                "keyword": {
+                    "description": "Specifies whether this argument triggers special processing after it. Currently, only the \"where\" argument is known to do this.",
+                    "type": "boolean"
+                }
+            }
+        }
+    }
+}

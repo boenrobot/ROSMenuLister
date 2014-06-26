@@ -13,14 +13,16 @@ import bg.scelus.routeros.menulister.models.MenuItem;
 public class Parser implements Runnable {
 	private PrintWriter out;
 	private BufferedReader in;
+        private String outfile;
 
-	public Parser(BufferedReader in, PrintWriter out) {
+	public Parser(BufferedReader in, PrintWriter out, String outfile) {
 		this.in = in;
 		this.out = out;
+                this.outfile = outfile;
 	}
 
 	public ArrayList<String> getResponse() throws IOException {
-		ArrayList<String> response = new ArrayList<String>();
+		ArrayList<String> response = new ArrayList<>();
 		String line;
 		while ((line = in.readLine()) != null) {
 			response.add(line);
@@ -41,13 +43,11 @@ public class Parser implements Runnable {
 			getResponse();
 			System.out.println("Logged in");
 
-			MenuItem mainMenu = new MenuItem();
-			mainMenu.name = "main";
-			mainMenu.description = "list of all commands and submenus";
-			mainMenu.level = 0;
-			LinkedList<MenuItem> queue = new LinkedList<MenuItem>();
-			LinkedList<Command> cmds = new LinkedList<Command>();
-			LinkedList<Argument> args = new LinkedList<Argument>();
+			MenuItem mainMenu = new MenuItem("");
+			mainMenu.summary = "";
+			LinkedList<MenuItem> queue = new LinkedList<>();
+			LinkedList<Command> cmds = new LinkedList<>();
+			LinkedList<Argument> args = new LinkedList<>();
 			queue.add(mainMenu);
 
 			while (!queue.isEmpty()) {
@@ -73,9 +73,11 @@ public class Parser implements Runnable {
 				startArgumentList(arg);
 			System.out.println("Listed all arguments");
 
-			PrintWriter writer = new PrintWriter("json.txt", "UTF-8");
-			writer.println(mainMenu.getJSON().toJSONString());
-			writer.close();
+                        try (PrintWriter writer = new PrintWriter(outfile, "UTF-8")) {
+                            writer.println(mainMenu.getJSON().toJSONString());
+                        } catch (Exception e) {
+                            System.err.println("Failed to write file.");
+                        }
 			System.out.println("JSON generated");
 
 			System.out.println("Exiting");
@@ -86,14 +88,14 @@ public class Parser implements Runnable {
 	}
 
 	private String getCommand(MenuItem menu) {
-		if (menu.level > 0)
-			return new String(getCommand(menu.parent) + " " + menu.name);
+		if (null != menu.parent)
+			return getCommand(menu.parent) + " " + menu.name;
 		else
 			return "";
 	}
 
 	private String getCommand(Command command) {
-		return new String(getCommand(command.parent) + " " + command.name);
+		return getCommand(command.parent) + " " + command.name;
 	}
 
 	private void startArgumentList(Argument arg) throws IOException {
@@ -136,7 +138,7 @@ public class Parser implements Runnable {
 		} while (keepDeleting);
 
 		getResponse();
-		arg.keyword = keyword;
+		arg.isKeyword = keyword;
 	}
 
 	private void startCommandList(Command command) throws IOException {
@@ -149,27 +151,32 @@ public class Parser implements Runnable {
 		do {
 			for (String line : getResponse()) {
 				if (line.startsWith("[m[32m")) {
-					Argument arg = new Argument();
-					arg.name = line.substring("[m[32m".length(),
-							line.indexOf("[m[33m --"));
-					arg.optional = false;
-					arg.parent = command;
+					Argument arg = new Argument(
+                                            line.substring(
+                                               "[m[32m".length(),
+                                               line.indexOf("[m[33m --")
+                                            ),
+                                            command
+                                        );
 
 					if (line.indexOf("-- [m") > 0)
-						arg.description = line.substring(
+						arg.summary = line.substring(
 								line.indexOf("-- [m") + "-- [m".length(),
 								line.length()).replace("'", "\'");
 
 					command.arguments.add(arg);
 				} else if (line.startsWith("[m[33m<[m[32m")) {
-					Argument arg = new Argument();
-					arg.name = line.substring("[m[33m<[m[32m".length(),
-							line.indexOf("[m[33m>"));
-					arg.optional = true;
-					arg.parent = command;
+					Argument arg = new Argument(
+                                            line.substring(
+                                                "[m[33m<[m[32m".length(),
+					        line.indexOf("[m[33m>")
+                                            ),
+                                            command
+                                        );
+                                        arg.isUnnamed = true;
 
 					if (line.indexOf("-- [m") > 0)
-						arg.description = line.substring(
+						arg.summary = line.substring(
 								line.indexOf("-- [m") + "-- [m".length(),
 								line.length()).replace("'", "\'");
 
@@ -201,10 +208,10 @@ public class Parser implements Runnable {
 
 		String command = getCommand(menu);
 
-		ArrayList<MenuItem> result = new ArrayList<MenuItem>();
-		ArrayList<String> response = new ArrayList<String>();
+		ArrayList<MenuItem> result = new ArrayList<>();
+		ArrayList<String> response = new ArrayList<>();
 
-		if (menu.level > 0) {
+		if (null != menu.parent) {
 			response.addAll(getResponse());
 			out.print(command + " ?\r\n");
 		} else {
@@ -218,16 +225,18 @@ public class Parser implements Runnable {
 		System.out.println("Parsing menu " + command);
 		for (String line : response) {
 			if (line.startsWith("[m[36m")) {
-				MenuItem item = new MenuItem();
-				item.name = line.substring("[m[36m".length(),
-						line.indexOf("[m[33m"));
+				MenuItem item = new MenuItem(
+                                    line.substring(
+                                        "[m[36m".length(),
+					line.indexOf("[m[33m")
+                                    )
+                                );
 
 				if (line.indexOf("-- [m") > 0)
-					item.description = line.substring(
+					item.summary = line.substring(
 							line.indexOf("-- [m") + "-- [m".length(),
 							line.length()).replace("'", "\'");
 				item.parent = menu;
-				item.level = menu.level + 1;
 
 				if (item.name.equals(".."))
 					continue;
@@ -235,25 +244,30 @@ public class Parser implements Runnable {
 				menu.subMenus.add(item);
 				result.add(item);
 			} else if (line.startsWith("[m[35")) {
-				Command cmd = new Command();
-				cmd.name = line.substring("[m[35m".length(),
-						line.indexOf("[m[33m"));
+				Command cmd = new Command(
+                                    line.substring(
+                                        "[m[35m".length(),
+					line.indexOf("[m[33m")
+                                    ),
+                                    menu
+                                );
 
 				if (line.indexOf("-- [m") > 0)
-					cmd.description = line.substring(
+					cmd.summary = line.substring(
 							line.indexOf("-- [m") + "-- [m".length(),
 							line.length()).replace("'", "\'");
-				cmd.parent = menu;
 
 				menu.commands.add(cmd);
 			}
 		}
 
 		// up the menus
-		if (menu.level > 0) {
+		if (null != menu.parent) {
+                        MenuItem parent = menu.parent;
 			String back = "";
-			for (int i = 0; i < menu.level; i++) {
+			while (null != parent) {
 				back += ".. ";
+                                parent = parent.parent;
 			}
 			out.print(back + "\r\n");
 			out.flush();
