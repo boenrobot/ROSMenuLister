@@ -4,9 +4,6 @@ import com.jcraft.jsch.Channel;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
 import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 
 public class Main {
@@ -26,7 +23,7 @@ public class Main {
                     .getPath())
                     .getName();
             System.out.println(
-                jar + " [output-file.json] [hostname] [username] [password]? [port]?"
+                    jar + " [output-file.json] [hostname] [username] [password]? [port]?"
             );
         } else {
             String outfile = args[0];
@@ -48,27 +45,25 @@ public class Main {
                 session.connect();
 
                 channel = session.openChannel("shell");
-
-                in = new BufferedReader(new InputStreamReader(channel.getInputStream()));
-                out = new PrintWriter(new OutputStreamWriter(channel.getOutputStream()));
-                Thread parseThread = new Thread(new Parser(in, out, outfile));
-
                 channel.connect();
-                parseThread.start();
+
+                Parser parser = new Parser(channel);
+                parser.run();
+
+                channel.disconnect();
+                session.disconnect();
+
+                try (PrintWriter writer = new PrintWriter(outfile, "UTF-8")) {
+                    writer.println(parser.getMainMenu().getJSON().toJSONString());
+                    System.out.println("JSON generated");
+                } catch (Exception e) {
+                    System.err.println("Failed to write file.");
+                }
+
+                System.out.println("Exiting");
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
-    }
-
-    public static void closeAll() {
-        try {
-            in.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        out.close();
-        channel.disconnect();
-        session.disconnect();
     }
 }

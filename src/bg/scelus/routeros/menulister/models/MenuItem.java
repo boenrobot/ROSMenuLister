@@ -1,7 +1,6 @@
 package bg.scelus.routeros.menulister.models;
 
 import java.util.ArrayList;
-
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
@@ -12,7 +11,7 @@ public class MenuItem {
     public String summary = "";
     public ArrayList<MenuItem> subMenus = new ArrayList<>();
     public ArrayList<Command> commands = new ArrayList<>();
-    
+
     public MenuItem(String name) {
         this.name = name;
     }
@@ -21,7 +20,9 @@ public class MenuItem {
     public JSONObject getJSON() {
         JSONObject result = new JSONObject();
         result.put("name", name);
-        result.put("summary", summary);
+        if (!summary.isEmpty()) {
+            result.put("summary", summary);
+        }
 
         JSONArray subMenuArray = new JSONArray();
         for (MenuItem item : subMenus) {
