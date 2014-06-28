@@ -1,17 +1,12 @@
 package bg.scelus.routeros.menulister;
 
-import com.jcraft.jsch.Channel;
+import com.jcraft.jsch.ChannelShell;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
-import java.io.BufferedReader;
 import java.io.PrintWriter;
+import java.util.concurrent.SynchronousQueue;
 
 public class Main {
-
-    public static BufferedReader in;
-    public static PrintWriter out;
-    public static Channel channel;
-    public static Session session;
 
     public static void main(String[] args) {
         if (args.length < 3) {
@@ -39,15 +34,26 @@ public class Main {
             }
             try {
                 JSch jsch = new JSch();
-                session = jsch.getSession(username, hostname, port);
+                Session session = jsch.getSession(username, hostname, port);
                 session.setConfig("StrictHostKeyChecking", "no");
                 session.setPassword(password);
+                System.out.print("Connecting...");
                 session.connect();
+                System.out.println("OK.");
 
-                channel = session.openChannel("shell");
+                System.out.print("Logging into shell...");
+                ChannelShell channel = (ChannelShell) session.openChannel("shell");
                 channel.connect();
+                System.out.println("OK.");
 
-                Parser parser = new Parser(channel);
+                SynchronousQueue<String> messages = new SynchronousQueue<String>() {
+                    @Override
+                    public boolean add(String element) {
+                        System.out.println(element);
+                        return true;
+                    }
+                };
+                Parser parser = new Parser(channel, messages);
                 parser.run();
 
                 channel.disconnect();
@@ -57,12 +63,14 @@ public class Main {
                     writer.println(parser.getMainMenu().getJSON().toJSONString());
                     System.out.println("JSON generated");
                 } catch (Exception e) {
-                    System.err.println("Failed to write file.");
+                    System.err.println(
+                            "Failed to write JSON file. Details: " + e.toString()
+                    );
                 }
 
                 System.out.println("Exiting");
             } catch (Exception e) {
-                e.printStackTrace();
+                System.err.println(e.toString());
             }
         }
     }

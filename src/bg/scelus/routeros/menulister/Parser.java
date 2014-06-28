@@ -3,32 +3,64 @@ package bg.scelus.routeros.menulister;
 import bg.scelus.routeros.menulister.models.Argument;
 import bg.scelus.routeros.menulister.models.Command;
 import bg.scelus.routeros.menulister.models.MenuItem;
-import com.jcraft.jsch.Channel;
+import com.jcraft.jsch.ChannelShell;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.util.AbstractQueue;
 import java.util.ArrayList;
 import java.util.LinkedList;
+import java.util.concurrent.SynchronousQueue;
 
 public class Parser implements Runnable {
 
     private PrintWriter out;
     private BufferedReader in;
     private MenuItem mainMenu = null;
+    private AbstractQueue<String> messages;
 
-    public Parser(Channel channel) {
-
-        try {
-            in = new BufferedReader(new InputStreamReader(channel.getInputStream()));
-            out = new PrintWriter(new OutputStreamWriter(channel.getOutputStream()));
-        } catch (IOException ex) {
-            ex.printStackTrace();
-        }
-
+    /**
+     * Creates a parser instance.
+     *
+     * @param channel The already opened shell, using Jsch as the SSH library.
+     *
+     * @throws java.io.IOException If unable to get the input or output streams
+     * out of the channel.
+     */
+    public Parser(ChannelShell channel) throws IOException {
+        this(
+                channel,
+                new SynchronousQueue<String>() {
+                    @Override
+                    public boolean add(String element) {
+                        return true;
+                    }
+                }
+        );
     }
 
+    /**
+     * Creates a parser instance.
+     *
+     * @param channel The already opened shell, using Jsch as the SSH library.
+     * @param messages A queue to receive status messages to.
+     *
+     * @throws java.io.IOException If unable to get the input or output streams
+     * out of the channel.
+     */
+    public Parser(ChannelShell channel, AbstractQueue<String> messages) throws IOException {
+        in = new BufferedReader(new InputStreamReader(channel.getInputStream()));
+        out = new PrintWriter(new OutputStreamWriter(channel.getOutputStream()));
+        this.messages = messages;
+    }
+
+    /**
+     * Get the generated main menu.
+     *
+     * @return The generated main menu, or NULL if not generated yet.
+     */
     public MenuItem getMainMenu() {
         return mainMenu;
     }
@@ -36,12 +68,12 @@ public class Parser implements Runnable {
     @Override
     public void run() {
         try {
-            System.out.println("Logging in...");
+            messages.add("Pressing Enter (to clear the command line).");
             out.println();
             out.flush();
 
             getResponse();
-            System.out.println("Logged in");
+            messages.add("Staring to parse.");
 
             MenuItem rootMenu = new MenuItem("");
             LinkedList<MenuItem> queue = new LinkedList<>();
@@ -56,7 +88,7 @@ public class Parser implements Runnable {
                 queue.addAll(startList(item));
                 cmds.addAll(item.commands);
             }
-            System.out.println("Listed all menus");
+            messages.add("Listed all menus");
 
             getResponse();
             getResponse();
@@ -66,15 +98,15 @@ public class Parser implements Runnable {
                 startCommandList(cmd);
                 args.addAll(cmd.arguments);
             }
-            System.out.println("Listed all commands");
+            messages.add("Listed all commands");
 
             for (Argument arg : args) {
                 startArgumentList(arg);
             }
-            System.out.println("Listed all arguments");
+            messages.add("Listed all arguments");
             this.mainMenu = rootMenu;
         } catch (IOException e) {
-            e.printStackTrace();
+            messages.add(e.toString());
         }
     }
 
@@ -104,7 +136,7 @@ public class Parser implements Runnable {
 
     protected void startArgumentList(Argument arg) throws IOException {
         String cmd = getCommand(arg.parent) + " " + arg.name;
-        System.out.println("Parsing argument \"" + cmd + "\"");
+        messages.add("Parsing argument \"" + cmd + "\"");
 
         boolean keyword = true;
 
@@ -150,7 +182,7 @@ public class Parser implements Runnable {
         out.print(cmd + " ?");
         out.flush();
 
-        System.out.println("Parsing command \"" + cmd + "\"");
+        messages.add("Parsing command \"" + cmd + "\"");
         boolean parsed = false;
         do {
             for (String line : getResponse()) {
@@ -229,7 +261,7 @@ public class Parser implements Runnable {
         response.addAll(getResponse());
         response.addAll(getResponse());
 
-        System.out.println("Parsing menu \"" + command + "\"");
+        messages.add("Parsing menu \"" + command + "\"");
         for (String line : response) {
             if (line.startsWith("[m[36m")) {
                 MenuItem item = new MenuItem(

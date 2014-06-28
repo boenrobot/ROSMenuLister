@@ -1,3 +1,5 @@
 !nbproject/
 nbproject/private
+bin/
+build/classes/
 out.json
