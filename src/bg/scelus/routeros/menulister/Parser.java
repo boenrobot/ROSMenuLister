@@ -65,6 +65,43 @@ public class Parser implements Runnable {
         return mainMenu;
     }
 
+    /**
+     * Gets the full path of a menu.
+     *
+     * @param menu The menu to get the full path of.
+     *
+     * @return The full path to the menu, relative to the up most parent.
+     */
+    public static String getFullPath(MenuItem menu) {
+        if (null != menu.parent) {
+            return getFullPath(menu.parent) + " " + menu.name;
+        } else {
+            return "";
+        }
+    }
+
+    /**
+     * Gets the full path of a fullMenu.
+     *
+     * @param command The fullMenu to get the full path of.
+     *
+     * @return The full path to the fullMenu, relative to the up most parent.
+     */
+    public static String getFullPath(Command command) {
+        return getFullPath(command.parent) + " " + command.name;
+    }
+
+    /**
+     * Gets the full path of an argument.
+     *
+     * @param arg The argument to get the full path of.
+     *
+     * @return The full path to the argument, relative to the up most parent.
+     */
+    public static String getFullPath(Argument arg) {
+        return getFullPath(arg.parent) + " " + arg.name;
+    }
+
     @Override
     public void run() {
         try {
@@ -122,31 +159,20 @@ public class Parser implements Runnable {
         return response;
     }
 
-    protected String getCommand(MenuItem menu) {
-        if (null != menu.parent) {
-            return getCommand(menu.parent) + " " + menu.name;
-        } else {
-            return "";
-        }
-    }
-
-    protected String getCommand(Command command) {
-        return getCommand(command.parent) + " " + command.name;
-    }
-
     protected void startArgumentList(Argument arg) throws IOException {
-        String cmd = getCommand(arg.parent) + " " + arg.name;
-        messages.add("Parsing argument \"" + cmd + "\"");
+        String fullArg = getFullPath(arg);
 
         boolean keyword = true;
 
-        out.print(cmd + "=?");
+        out.print(fullArg + "=?");
         out.flush();
+
+        messages.add("Parsing argument \"" + fullArg + "\"");
 
         // clear the line
         boolean keepDeleting = true;
         boolean longLine = false;
-        for (int i = 0; i < cmd.length() + 2; i++) {
+        for (int i = 0; i < fullArg.length() + 2; i++) {
             out.write((char) 8);
         }
         out.flush();
@@ -178,11 +204,11 @@ public class Parser implements Runnable {
     }
 
     protected void startCommandList(Command command) throws IOException {
-        String cmd = getCommand(command);
-        out.print(cmd + " ?");
+        String fullCommand = getFullPath(command);
+        out.print(fullCommand + " ?");
         out.flush();
 
-        messages.add("Parsing command \"" + cmd + "\"");
+        messages.add("Parsing command \"" + fullCommand + "\"");
         boolean parsed = false;
         do {
             for (String line : getResponse()) {
@@ -229,7 +255,7 @@ public class Parser implements Runnable {
         // clear the line
         boolean keepDeleting = true;
         do {
-            for (int i = 0; i < cmd.length() + 2; i++) {
+            for (int i = 0; i < fullCommand.length() + 2; i++) {
                 out.write((char) 8);
             }
             out.flush();
@@ -244,15 +270,14 @@ public class Parser implements Runnable {
     }
 
     protected ArrayList<MenuItem> startList(MenuItem menu) throws IOException {
-
-        String command = getCommand(menu);
+        String fullMenu = getFullPath(menu);
 
         ArrayList<MenuItem> result = new ArrayList<>();
         ArrayList<String> response = new ArrayList<>();
 
         if (null != menu.parent) {
             response.addAll(getResponse());
-            out.print(command + " ?\r\n");
+            out.print(fullMenu + " ?\r\n");
         } else {
             out.print(" ?\r\n");
         }
@@ -261,7 +286,7 @@ public class Parser implements Runnable {
         response.addAll(getResponse());
         response.addAll(getResponse());
 
-        messages.add("Parsing menu \"" + command + "\"");
+        messages.add("Parsing menu \"" + fullMenu + "\"");
         for (String line : response) {
             if (line.startsWith("[m[36m")) {
                 MenuItem item = new MenuItem(
