@@ -4,34 +4,44 @@ import bg.scelus.routeros.menulister.models.Argument;
 import bg.scelus.routeros.menulister.models.Command;
 import bg.scelus.routeros.menulister.models.MenuItem;
 import com.jcraft.jsch.ChannelShell;
+import com.jcraft.jsch.JSchException;
+import com.jcraft.jsch.Session;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.nio.CharBuffer;
 import java.util.AbstractQueue;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.concurrent.SynchronousQueue;
+import java.util.function.Consumer;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.regex.Pattern;
 
 public class Parser implements Runnable {
 
+    private ChannelShell channel;
     private PrintWriter out;
     private BufferedReader in;
     private MenuItem mainMenu = null;
     private AbstractQueue<String> messages;
+    private Pattern prompt = Pattern.compile("\\A\\[[^@]+@[^\\]]+\\] \\> .*\\z", Pattern.DOTALL);
 
     /**
      * Creates a parser instance.
      *
-     * @param channel The already opened shell, using Jsch as the SSH library.
+     * @param session The already connected session, using Jsch as the SSH library.
      *
      * @throws java.io.IOException If unable to get the input or output streams
      * out of the channel.
+     * @throws com.jcraft.jsch.JSchException If the session is not connected.
      */
-    public Parser(ChannelShell channel) throws IOException {
+    public Parser(Session session) throws IOException, JSchException {
         this(
-                channel,
+                session,
                 new SynchronousQueue<String>() {
                     @Override
                     public boolean add(String element) {
@@ -44,13 +54,19 @@ public class Parser implements Runnable {
     /**
      * Creates a parser instance.
      *
-     * @param channel The already opened shell, using Jsch as the SSH library.
+     * @param session The already connected session, using Jsch as the SSH library.
      * @param messages A queue to receive status messages to.
      *
      * @throws java.io.IOException If unable to get the input or output streams
      * out of the channel.
+     * @throws com.jcraft.jsch.JSchException If the session is not connected.
      */
-    public Parser(ChannelShell channel, AbstractQueue<String> messages) throws IOException {
+    public Parser(Session session, AbstractQueue<String> messages) throws IOException, JSchException {
+
+        messages.add("Logging into shell...");
+        channel = (ChannelShell) session.openChannel("shell");
+        channel.connect();
+        messages.add("OK.");
         in = new BufferedReader(new InputStreamReader(channel.getInputStream()));
         out = new PrintWriter(new OutputStreamWriter(channel.getOutputStream()));
         this.messages = messages;
@@ -127,8 +143,6 @@ public class Parser implements Runnable {
             }
             messages.add("Listed all menus");
 
-            getResponse();
-            getResponse();
             for (Command cmd : cmds) {
 //				if (!cmd.name.equals("find"))
 //					continue;
@@ -145,15 +159,44 @@ public class Parser implements Runnable {
         } catch (IOException e) {
             messages.add(e.toString());
         }
+        channel.disconnect();
     }
 
     protected ArrayList<String> getResponse() throws IOException {
+        return getResponse(-1);
+    }
+
+    protected ArrayList<String> getResponse(int promptChars) throws IOException {
         ArrayList<String> response = new ArrayList<>();
         String line;
+        while (!in.ready()) {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException ex) {
+            }
+        }
         while ((line = in.readLine()) != null) {
-            response.add(line);
-            if (line.contains("> ")) {
+            if (prompt.matcher(line).matches()) {
+                if (promptChars > -1) {
+                    if (line.endsWith(">")) {
+                        line = line.substring(0, line.length() - 1);
+                    }
+                    StringBuilder fullLine = new StringBuilder(line);
+                    String newLineDelim, newLine;
+                    while((promptChars -= 80) >= 0) {
+                        in.readLine();
+                        newLineDelim = in.readLine();
+                        while (!(newLine = in.readLine()).startsWith(newLineDelim)) {
+                            response.add(newLine);
+                        }
+                        fullLine.append(newLineDelim.substring(1));
+                    }
+                    line = fullLine.toString();
+                }
+                response.add(line);
                 break;
+            } else {
+                response.add(line);
             }
         }
         return response;
@@ -162,45 +205,75 @@ public class Parser implements Runnable {
     protected void startArgumentList(Argument arg) throws IOException {
         String fullArg = getFullPath(arg);
 
-        boolean keyword = true;
-
         out.print(fullArg + "=?");
         out.flush();
+        int outLength = fullArg.length() + 1;
+        int promptLineFullLength = -1;
 
         messages.add("Parsing argument \"" + fullArg + "\"");
 
-        // clear the line
-        boolean keepDeleting = true;
-        boolean longLine = false;
-        for (int i = 0; i < fullArg.length() + 2; i++) {
-            out.write((char) 8);
-        }
-        out.flush();
-
-        do {
-            for (String line : getResponse()) {
-                if (longLine) {
-                    out.print("\r\n");
-                    out.flush();
-                    longLine = false;
-                } else if (line.contains("[K")) {
-                    keyword = false;
-                    break;
-                } else if (line.endsWith(">") && line.length() >= 79) {
-                    out.print("\r\n");
-                    out.flush();
-                    longLine = true;
-                } else if (line.endsWith("] > ")) {
-                    keepDeleting = false;
-                    break;
-                }
+        CharBuffer buff = CharBuffer.allocate(1024 * 1024);
+        in.mark(1024 * 1024);
+        do  {
+            in.read(buff);
+            try {
+                Thread.sleep(2 * outLength);
+            } catch (InterruptedException ex) {
+                break;
             }
-            out.write((char) 8);
-            out.flush();
-        } while (keepDeleting);
+        } while(buff.hasRemaining() && in.ready());
+        buff.rewind();
+        String buffContents = buff.toString().replace(">\r<", "");
+        in.reset();
 
-        getResponse();
-        arg.isKeyword = keyword;
+        if (buffContents.contains("\n") || buffContents.contains("\r")) {
+            getResponse();
+
+            ArrayList<String> response = getResponse();
+            String promptString = response.remove(response.size() - 1).trim();
+            promptString = promptString.substring(0, promptString.indexOf(">") + 2);
+            promptLineFullLength = promptString.length() + outLength;
+            //clear the line
+            out.print((char)1);
+            out.print((char)11);
+            out.flush();
+            if (promptLineFullLength >= 80) {
+                response = getResponse();
+                if (response.size() < 5) {
+                    arg.isKeyword = true;
+                    response.clear();
+                } else {
+                    response.remove(response.size() - 1);
+                    response.remove(response.size() - 1);
+                    response.remove(response.size() - 1);
+                    response.remove(0);
+                    response.remove(0);
+                }
+            } else {
+                getResponse();
+            }
+            getResponse();
+            getResponse();
+
+            StringBuilder argInfo = new StringBuilder();
+            response.forEach((String line) -> {
+                argInfo.append(line);
+                argInfo.append('\n');
+            });
+            if (argInfo.length() > 0) {
+                arg.values = argInfo.toString().trim();
+            }
+        } else {
+            arg.isKeyword = true;
+        
+            //clear the line
+            out.print((char)1);
+            out.print((char)11);
+            out.flush();
+            getResponse();
+            getResponse();
+            getResponse();
+        }
     }
 
     protected void startCommandList(Command command) throws IOException {
@@ -209,85 +282,64 @@ public class Parser implements Runnable {
         out.flush();
 
         messages.add("Parsing command \"" + fullCommand + "\"");
-        boolean parsed = false;
-        do {
-            for (String line : getResponse()) {
-                if (line.startsWith("[m[32m")) {
-                    Argument arg = new Argument(
-                            line.substring(
-                                    "[m[32m".length(),
-                                    line.indexOf("[m[33m --")
-                            ),
-                            command
-                    );
+        getResponse();
+        for (String line : getResponse()) {
+            if (line.startsWith("[m[32m")) {
+                Argument arg = new Argument(
+                        line.substring(
+                                "[m[32m".length(),
+                                line.indexOf("[m[33m --")
+                        ),
+                        command
+                );
 
-                    if (line.indexOf("-- [m") > 0) {
-                        arg.summary = line.substring(
-                                line.indexOf("-- [m") + "-- [m".length(),
-                                line.length()).replace("'", "\'");
-                    }
-
-                    command.arguments.add(arg);
-                } else if (line.startsWith("[m[33m<[m[32m")) {
-                    Argument arg = new Argument(
-                            line.substring(
-                                    "[m[33m<[m[32m".length(),
-                                    line.indexOf("[m[33m>")
-                            ),
-                            command
-                    );
-                    arg.isUnnamed = true;
-
-                    if (line.indexOf("-- [m") > 0) {
-                        arg.summary = line.substring(
-                                line.indexOf("-- [m") + "-- [m".length(),
-                                line.length()).replace("'", "\'");
-                    }
-
-                    command.arguments.add(arg);
-                } else if (line.endsWith("[K")) {
-                    parsed = true;
-                    break;
+                if (line.indexOf("-- [m") > 0) {
+                    arg.summary = line.substring(
+                            line.indexOf("-- [m") + "-- [m".length(),
+                            line.length()).replace("'", "\'");
                 }
-            }
-        } while (!parsed);
 
-        // clear the line
-        boolean keepDeleting = true;
-        do {
-            for (int i = 0; i < fullCommand.length() + 2; i++) {
-                out.write((char) 8);
-            }
-            out.flush();
+                command.arguments.add(arg);
+            } else if (line.startsWith("[m[33m<[m[32m")) {
+                Argument arg = new Argument(
+                        line.substring(
+                                "[m[33m<[m[32m".length(),
+                                line.indexOf("[m[33m>")
+                        ),
+                        command
+                );
+                arg.isUnnamed = true;
 
-            for (String line : getResponse()) {
-                if (line.endsWith("> ")) {
-                    keepDeleting = false;
-                    break;
+                if (line.indexOf("-- [m") > 0) {
+                    arg.summary = line.substring(
+                            line.indexOf("-- [m") + "-- [m".length(),
+                            line.length()).replace("'", "\'");
                 }
+
+                command.arguments.add(arg);
             }
-        } while (keepDeleting);
+        }
+        
+        //clear the line
+        out.print((char)1);
+        out.print((char)11);
+        out.flush();
+        getResponse();
+        getResponse();
+        getResponse();
     }
 
     protected ArrayList<MenuItem> startList(MenuItem menu) throws IOException {
         String fullMenu = getFullPath(menu);
 
         ArrayList<MenuItem> result = new ArrayList<>();
-        ArrayList<String> response = new ArrayList<>();
 
-        if (null != menu.parent) {
-            response.addAll(getResponse());
-            out.print(fullMenu + " ?\r\n");
-        } else {
-            out.print(" ?\r\n");
-        }
+        out.write(fullMenu + " ?");
         out.flush();
-        response.addAll(getResponse());
-        response.addAll(getResponse());
-        response.addAll(getResponse());
-
         messages.add("Parsing menu \"" + fullMenu + "\"");
-        for (String line : response) {
+
+        getResponse();
+        for (String line : getResponse()) {
             if (line.startsWith("[m[36m")) {
                 MenuItem item = new MenuItem(
                         line.substring(
@@ -328,22 +380,15 @@ public class Parser implements Runnable {
                 menu.commands.add(cmd);
             }
         }
+        
+        //clear the line
+        out.print((char)1);
+        out.print((char)11);
+        out.flush();
+        getResponse();
+        getResponse();
+        getResponse();
 
-        // up the menus
-        if (null != menu.parent) {
-            MenuItem parent = menu.parent;
-            String back = "";
-            while (null != parent) {
-                back += ".. ";
-                parent = parent.parent;
-            }
-            out.print(back + "\r\n");
-            out.flush();
-            getResponse();
-            getResponse();
-            getResponse();
-            getResponse();
-        }
         return result;
     }
 }

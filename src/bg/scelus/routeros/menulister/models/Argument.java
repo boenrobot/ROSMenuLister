@@ -7,6 +7,7 @@ public class Argument {
     public String name;
     public Command parent;
     public String summary = "";
+    public String values = null;
     public boolean isUnnamed = false;
     public boolean isKeyword = false;
 
@@ -27,6 +28,9 @@ public class Argument {
         }
         if (isKeyword) {
             result.put("keyword", isKeyword);
+        }
+        if (null != values) {
+            result.put("values", values);
         }
         return result;
     }

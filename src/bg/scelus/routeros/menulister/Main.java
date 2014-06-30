@@ -41,11 +41,6 @@ public class Main {
                 session.connect();
                 System.out.println("OK.");
 
-                System.out.print("Logging into shell...");
-                ChannelShell channel = (ChannelShell) session.openChannel("shell");
-                channel.connect();
-                System.out.println("OK.");
-
                 SynchronousQueue<String> messages = new SynchronousQueue<String>() {
                     @Override
                     public boolean add(String element) {
@@ -53,10 +48,9 @@ public class Main {
                         return true;
                     }
                 };
-                Parser parser = new Parser(channel, messages);
+                Parser parser = new Parser(session, messages);
                 parser.run();
 
-                channel.disconnect();
                 session.disconnect();
 
                 try (PrintWriter writer = new PrintWriter(outfile, "UTF-8")) {
