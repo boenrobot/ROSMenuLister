@@ -13,7 +13,12 @@
                     "type": "string"
                 },
                 "summary": {
-                    "description": "A summary of the menu, as seen in the list of its parent menu.",
+                    "description": "A summary of the menu, as seen in the list of its parent menu. In the root menu, this contains the RouterOS version, as detected from the pre-prompt screen.",
+                    "type": "string",
+                    "default": ""
+                },
+                "description": {
+                    "description": "Description of the menu, as seen in the help for the menu itself, above the list of submenus and commands.",
                     "type": "string",
                     "default": ""
                 },
@@ -49,6 +54,11 @@
                     "type": "string",
                     "default": ""
                 },
+                "description": {
+                    "description": "Description of the command, as seen in the help for the command itself, above the list of arguments.",
+                    "type": "string",
+                    "default": ""
+                },
                 "arguments": {
                     "description": "Arguments that this command may take.",
                     "type": "array",
@@ -73,13 +83,18 @@
                     "type": "string",
                     "default": ""
                 },
+                "description": {
+                    "description": "Description of the argument, as seen in the help for the argument itself, above the list of values.",
+                    "type": "string",
+                    "default": ""
+                },
                 "unnamed": {
                     "description": "Specifies whether this argument's name can be omitted when using it from the command line.",
                     "type": "boolean",
                     "default": false
                 },
-                "keyword": {
-                    "description": "Specifies whether this argument triggers special processing after it. Currently, only the \"where\" argument is known to do this.",
+                "special": {
+                    "description": "Specifies whether this argument is not a normal name=value pair argument. This includes empty arguments, for which there won't be a \"values\" property, as well as keywords like \"where\", for which the \"values\" property will describe the possible starting tokens.",
                     "type": "boolean",
                     "default": false
                 }

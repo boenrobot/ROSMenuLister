@@ -9,6 +9,7 @@ public class MenuItem {
     public String name;
     public MenuItem parent = null;
     public String summary = "";
+    public String description = "";
     public ArrayList<MenuItem> subMenus = new ArrayList<>();
     public ArrayList<Command> commands = new ArrayList<>();
 
@@ -20,20 +21,25 @@ public class MenuItem {
     public JSONObject getJSON() {
         JSONObject result = new JSONObject();
         result.put("name", name);
+
         if (!summary.isEmpty()) {
             result.put("summary", summary);
         }
 
-        JSONArray subMenuArray = new JSONArray();
-        for (MenuItem item : subMenus) {
-            subMenuArray.add(item.getJSON());
+        if (!description.isEmpty()) {
+            result.put("description", description);
         }
+
+        JSONArray subMenuArray = new JSONArray();
+        subMenus.stream().forEach((item) -> {
+            subMenuArray.add(item.getJSON());
+        });
         result.put("submenus", subMenuArray);
 
         JSONArray commandsArray = new JSONArray();
-        for (Command item : commands) {
+        commands.stream().forEach((item) -> {
             commandsArray.add(item.getJSON());
-        }
+        });
         result.put("commands", commandsArray);
 
         return result;

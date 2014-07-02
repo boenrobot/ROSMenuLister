@@ -1,6 +1,5 @@
 package bg.scelus.routeros.menulister;
 
-import com.jcraft.jsch.ChannelShell;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
 import java.io.PrintWriter;

@@ -9,7 +9,7 @@ public class Argument {
     public String summary = "";
     public String values = null;
     public boolean isUnnamed = false;
-    public boolean isKeyword = false;
+    public boolean isSpecial = false;
 
     public Argument(String name, Command parent) {
         this.name = name;
@@ -20,18 +20,23 @@ public class Argument {
     public JSONObject getJSON() {
         JSONObject result = new JSONObject();
         result.put("name", name);
+
         if (!summary.isEmpty()) {
             result.put("summary", summary);
         }
+
         if (isUnnamed) {
             result.put("unnamed", isUnnamed);
         }
-        if (isKeyword) {
-            result.put("keyword", isKeyword);
+
+        if (isSpecial) {
+            result.put("keyword", isSpecial);
         }
+
         if (null != values) {
             result.put("values", values);
         }
+
         return result;
     }
 }
