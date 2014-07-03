@@ -31,7 +31,8 @@ public class Parser implements Runnable {
     /**
      * Creates a parser instance.
      *
-     * @param session The already connected session, using Jsch as the SSH library.
+     * @param session The already connected session, using Jsch as the SSH
+     * library.
      *
      * @throws java.io.IOException If unable to get the input or output streams
      * out of the channel.
@@ -52,7 +53,8 @@ public class Parser implements Runnable {
     /**
      * Creates a parser instance.
      *
-     * @param session The already connected session, using Jsch as the SSH library.
+     * @param session The already connected session, using Jsch as the SSH
+     * library.
      * @param messages A queue to receive status messages to.
      *
      * @throws java.io.IOException If unable to get the input or output streams
@@ -124,7 +126,7 @@ public class Parser implements Runnable {
             out.flush();
 
             ArrayList<String> enterResponse = getResponseMatch();
-        
+
             Pattern rosVersionPattern = Pattern.compile(".*MikroTik RouterOS (.+) \\(c\\).*");
             StringBuilder rosVersion = new StringBuilder();
             enterResponse.forEach((String line) -> {
@@ -133,17 +135,17 @@ public class Parser implements Runnable {
                     rosVersion.append(matcher.group(1));
                 }
             });
-            
+
             out.print(" \001\013");
             out.flush();
             getResponseMatch();
-            
+
             ArrayList<String> homeResponse = getResponseMatch();
             String homePrompt = homeResponse.remove(homeResponse.size() - 1).trim().concat(" ");
-            
+
             ArrayList<String> clearResponse = getResponseMatch();
             String clearPrompt = clearResponse.remove(clearResponse.size() - 1).trim().concat(" ");
-            
+
             boolean clearMayBeHome = true;
             while (!homePrompt.equals(clearPrompt)) {
                 if (clearMayBeHome) {
@@ -195,7 +197,7 @@ public class Parser implements Runnable {
         }
         channel.disconnect();
     }
-    
+
     protected ArrayList<String> getResponseMatch() throws IOException {
         ArrayList<String> response = new ArrayList<>();
         String line;
@@ -241,7 +243,6 @@ public class Parser implements Runnable {
         out.print(fullArg + "\t?");
         out.flush();
 
-        
         getResponse();
         getResponse();
 
@@ -261,7 +262,7 @@ public class Parser implements Runnable {
         if (promptLine.endsWith(">")) {
             arg.isSpecial = !response.remove(response.size() - 1).endsWith("=");
             response.remove(response.size() - 1);
-            for (int i = 0, l = response.size(); i<l; ++i) {
+            for (int i = 0, l = response.size(); i < l; ++i) {
                 if (response.get(0).startsWith("<")) {
                     response.remove(0);
                 } else {
@@ -277,7 +278,7 @@ public class Parser implements Runnable {
             getResponse();
             getResponse();
         }
-        
+
         if (arg.isSpecial) {
             //Determine if empty or keyword
             MenuItem cmdAsMenu = new MenuItem(arg.parent.name);
@@ -285,7 +286,7 @@ public class Parser implements Runnable {
             Command argAsCmd = new Command(arg.name, cmdAsMenu);
             parseCommand(fullArg.trim(), argAsCmd);
             ArrayList<Argument> cmdArgs = arg.parent.arguments;
-            
+
             argAsCmd.arguments.removeIf((Argument pArg) -> {
                 return cmdArgs.stream().anyMatch((cmdArg) -> (cmdArg.name.equals(pArg.name)));
             });
@@ -296,7 +297,7 @@ public class Parser implements Runnable {
         } else {
             StringBuilder description = new StringBuilder();
             String line;
-            for (int i = 0, l = response.size(); i<l; ++i) {
+            for (int i = 0, l = response.size(); i < l; ++i) {
                 line = response.get(0);
                 if (line.startsWith("\033[m")) {
                     break;
@@ -328,13 +329,13 @@ public class Parser implements Runnable {
 
         ArrayList<String> response = getResponse();
         response.remove(response.size() - 1);
-        
+
         //clear the line
         out.print("\001\013");
         out.flush();
         getResponse();
         getResponse();
-        if (fullCommand.length() >= 79) {
+        if ((fullCommand.length() + promptString.length()) >= 79) {
             response = getResponse();
             response.remove(response.size() - 1);
             response.remove(response.size() - 1);
@@ -395,7 +396,7 @@ public class Parser implements Runnable {
                 }
             }
         }
-        
+
         //Add last argument
         if (null != arg) {
             if (arg.summary.endsWith("[m")) {
@@ -438,7 +439,7 @@ public class Parser implements Runnable {
                     ).replace("'", "\'");
                 }
                 item.parent = menu;
-                
+
                 lastOneWasAMenu = true;
 
                 if (item.name.equals("..")) {
@@ -481,7 +482,7 @@ public class Parser implements Runnable {
                 }
             }
         }
-        
+
         //clear the line
         out.print("\001\013");
         out.flush();

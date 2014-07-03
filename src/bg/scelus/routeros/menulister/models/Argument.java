@@ -35,7 +35,7 @@ public class Argument {
         }
 
         if (isSpecial) {
-            result.put("keyword", isSpecial);
+            result.put("special", isSpecial);
         }
 
         if (null != values) {
