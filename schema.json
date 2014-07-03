@@ -97,6 +97,11 @@
                     "description": "Specifies whether this argument is not a normal name=value pair argument. This includes empty arguments, for which there won't be a \"values\" property, as well as keywords like \"where\", for which the \"values\" property will describe the possible starting tokens.",
                     "type": "boolean",
                     "default": false
+                },
+                "values": {
+                    "description": "Raw unparsed text from console's help, describing the possible values for the argument, or if the argument is a keyword (e.g. \"where\"), describes the first possible token.",
+                    "type": "string",
+                    "default": ""
                 }
             }
         }

@@ -7,6 +7,7 @@ public class Argument {
     public String name;
     public Command parent;
     public String summary = "";
+    public String description = "";
     public String values = null;
     public boolean isUnnamed = false;
     public boolean isSpecial = false;
@@ -23,6 +24,10 @@ public class Argument {
 
         if (!summary.isEmpty()) {
             result.put("summary", summary);
+        }
+
+        if (!description.isEmpty()) {
+            result.put("description", description);
         }
 
         if (isUnnamed) {

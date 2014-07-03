@@ -278,8 +278,8 @@ public class Parser implements Runnable {
             getResponse();
         }
         
-        //Determine if empty or keyword
         if (arg.isSpecial) {
+            //Determine if empty or keyword
             MenuItem cmdAsMenu = new MenuItem(arg.parent.name);
             cmdAsMenu.parent = arg.parent.parent;
             Command argAsCmd = new Command(arg.name, cmdAsMenu);
@@ -293,15 +293,29 @@ public class Parser implements Runnable {
                 //Output with argument is the same as the command itself => empty argument
                 response.clear();
             }
+        } else {
+            StringBuilder description = new StringBuilder();
+            String line;
+            for (int i = 0, l = response.size(); i<l; ++i) {
+                line = response.get(0);
+                if (line.startsWith("\033[m")) {
+                    break;
+                }
+                description.append(line);
+                description.append('\n');
+                response.remove(0);
+            }
+            arg.description = description.toString().trim();
         }
 
-        StringBuilder argInfo = new StringBuilder();
+        StringBuilder values = new StringBuilder();
         response.forEach((String line) -> {
-            argInfo.append(line);
-            argInfo.append('\n');
+            values.append(line);
+            values.append('\n');
         });
-        if (argInfo.length() > 0) {
-            arg.values = argInfo.toString().trim();
+        String valuesString = values.toString().trim();
+        if (valuesString.length() > 0) {
+            arg.values = valuesString;
         }
     }
 
