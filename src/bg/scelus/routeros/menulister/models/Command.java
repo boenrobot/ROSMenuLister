@@ -4,17 +4,12 @@ import java.util.ArrayList;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
-public class Command {
+public class Command extends MenuItem {
 
-    public String name;
-    public Menu parent;
-    public String summary = "";
-    public String description = "";
-    public ArrayList<Argument> arguments = new ArrayList<>();
+    public final ArrayList<Argument> arguments = new ArrayList<>();
 
     public Command(String name, Menu parent) {
-        this.name = name;
-        this.parent = parent;
+        super(name, parent);
     }
 
     @SuppressWarnings("unchecked")

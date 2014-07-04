@@ -2,18 +2,16 @@ package bg.scelus.routeros.menulister.models;
 
 import org.json.simple.JSONObject;
 
-public class Argument {
+public class Argument extends Node {
 
-    public String name;
-    public Command parent;
-    public String summary = "";
-    public String description = "";
+    public final Command parent;
+
     public String values = null;
     public boolean isUnnamed = false;
     public boolean isSpecial = false;
 
     public Argument(String name, Command parent) {
-        this.name = name;
+        super(name);
         this.parent = parent;
     }
 

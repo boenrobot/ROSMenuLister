@@ -3,6 +3,7 @@ package bg.scelus.routeros.menulister;
 import bg.scelus.routeros.menulister.models.Argument;
 import bg.scelus.routeros.menulister.models.Command;
 import bg.scelus.routeros.menulister.models.Menu;
+import bg.scelus.routeros.menulister.models.MenuItem;
 import com.jcraft.jsch.ChannelShell;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
@@ -20,13 +21,15 @@ import java.util.regex.Pattern;
 
 public class Parser implements Runnable {
 
+    private final Pattern prompt = Pattern.compile("\\A\\[.+@.+\\] \\> .*\\z");
+
+    private Menu mainMenu = null;
+    private String promptString = null;
+
     private ChannelShell channel;
     private PrintWriter out;
     private BufferedReader in;
-    private Menu mainMenu = null;
     private AbstractQueue<String> messages;
-    private String promptString = null;
-    private Pattern prompt = Pattern.compile("\\A\\[.+@.+\\] \\> .*\\z");
 
     /**
      * Creates a parser instance.
@@ -55,7 +58,7 @@ public class Parser implements Runnable {
      *
      * @param session The already connected session, using Jsch as the SSH
      * library.
-     * @param messages A queue to receive status messages to.
+     * @param messages A menus to receive status messages to.
      *
      * @throws java.io.IOException If unable to get the input or output streams
      * out of the channel.
@@ -82,29 +85,18 @@ public class Parser implements Runnable {
     }
 
     /**
-     * Gets the full path of a menu.
+     * Gets the full path of a menu item.
      *
-     * @param menu The menu to get the full path of.
+     * @param item The item to get the full path of.
      *
-     * @return The full path to the menu, relative to the up most parent.
+     * @return The full path to the item, relative to the up most parent.
      */
-    public static String getFullPath(Menu menu) {
-        if (null != menu.parent) {
-            return getFullPath(menu.parent) + " " + menu.name;
+    public static String getFullPath(MenuItem item) {
+        if (null != item.parent) {
+            return getFullPath(item.parent) + " " + item.name;
         } else {
             return "";
         }
-    }
-
-    /**
-     * Gets the full path of a fullMenu.
-     *
-     * @param command The fullMenu to get the full path of.
-     *
-     * @return The full path to the fullMenu, relative to the up most parent.
-     */
-    public static String getFullPath(Command command) {
-        return getFullPath(command.parent) + " " + command.name;
     }
 
     /**
@@ -163,24 +155,24 @@ public class Parser implements Runnable {
             promptString = clearPrompt;
             messages.add("Staring to parse.");
 
-            Menu rootMenu = new Menu("");
+            Menu rootMenu = new Menu("", null);
             rootMenu.summary = rosVersion.toString();
-            LinkedList<Menu> queue = new LinkedList<>();
+            LinkedList<Menu> menus = new LinkedList<>();
             LinkedList<Command> cmds = new LinkedList<>();
             LinkedList<Argument> args = new LinkedList<>();
-            queue.add(rootMenu);
+            menus.add(rootMenu);
 
-            while (!queue.isEmpty()) {
-                Menu item = queue.remove(0);
+            while (!menus.isEmpty()) {
+                Menu item = menus.remove(0);
 //				if (!item.name.equals("main") && !item.name.equals("tool") && !item.name.equals("traffic-generator") && !item.name.equals("raw-packet-template"))
 //					continue;
-                queue.addAll(startList(item));
+                menus.addAll(startMenuList(item));
                 cmds.addAll(item.commands);
             }
             messages.add("Listed all menus");
 
             for (Command cmd : cmds) {
-//				if (!cmd.name.equals("find"))
+//				if (!item.name.equals("find"))
 //					continue;
                 startCommandList(cmd);
                 args.addAll(cmd.arguments);
@@ -281,8 +273,7 @@ public class Parser implements Runnable {
 
         if (arg.isSpecial) {
             //Determine if empty or keyword
-            Menu cmdAsMenu = new Menu(arg.parent.name);
-            cmdAsMenu.parent = arg.parent.parent;
+            Menu cmdAsMenu = new Menu(arg.parent.name, arg.parent.parent);
             Command argAsCmd = new Command(arg.name, cmdAsMenu);
             parseCommand(fullArg.trim(), argAsCmd);
             ArrayList<Argument> cmdArgs = arg.parent.arguments;
@@ -414,19 +405,20 @@ public class Parser implements Runnable {
         parseCommand(getFullPath(command), command);
     }
 
-    protected ArrayList<Menu> startList(Menu menu) throws IOException {
+    protected ArrayList<Menu> startMenuList(Menu menu) throws IOException {
         String fullMenu = getFullPath(menu);
         messages.add("Parsing menu \"" + fullMenu + "\"");
 
         ArrayList<Menu> result = new ArrayList<>();
-        boolean lastOneWasAMenu = true;
+        MenuItem item = null;
         for (String line : getHelpResponse(fullMenu)) {
             if (line.startsWith("[m[36m")) {
-                Menu item = new Menu(
+                item = new Menu(
                         line.substring(
                                 "[m[36m".length(),
                                 line.indexOf("[m[33m")
-                        )
+                        ),
+                        menu
                 );
 
                 if (line.indexOf("-- [m") > 0) {
@@ -435,18 +427,15 @@ public class Parser implements Runnable {
                             line.length()
                     ).replace("'", "\'");
                 }
-                item.parent = menu;
-
-                lastOneWasAMenu = true;
 
                 if (item.name.equals("..")) {
                     continue;
                 }
 
-                menu.subMenus.add(item);
-                result.add(item);
+                menu.subMenus.add((Menu) item);
+                result.add((Menu) item);
             } else if (line.startsWith("[m[35")) {
-                Command cmd = new Command(
+                item = new Command(
                         line.substring(
                                 "[m[35m".length(),
                                 line.indexOf("[m[33m")
@@ -455,27 +444,20 @@ public class Parser implements Runnable {
                 );
 
                 if (line.indexOf("-- [m") > 0) {
-                    cmd.summary = line.substring(
+                    item.summary = line.substring(
                             line.indexOf("-- [m") + "-- [m".length(),
                             line.length()).replace("'", "\'");
                 }
-                lastOneWasAMenu = false;
 
-                menu.commands.add(cmd);
+                menu.commands.add((Command) item);
             } else {
                 if (line.endsWith("[m")) {
                     line = line.substring(0, line.lastIndexOf("[m"));
                 }
-                if (menu.subMenus.isEmpty() && menu.commands.isEmpty()) {
+                if (null == item) {
                     menu.description = menu.description + line;
                 } else {
-                    if (lastOneWasAMenu) {
-                        Menu lastMenu = menu.subMenus.get(menu.subMenus.size() - 1);
-                        lastMenu.summary = lastMenu.summary + line;
-                    } else {
-                        Command lastCommand = menu.commands.get(menu.commands.size() - 1);
-                        lastCommand.summary = lastCommand.summary + line;
-                    }
+                    item.summary = item.summary + line;
                 }
             }
         }

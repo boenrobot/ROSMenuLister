@@ -4,17 +4,13 @@ import java.util.ArrayList;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
-public class Menu {
+public class Menu extends MenuItem {
 
-    public String name;
-    public Menu parent = null;
-    public String summary = "";
-    public String description = "";
-    public ArrayList<Menu> subMenus = new ArrayList<>();
-    public ArrayList<Command> commands = new ArrayList<>();
+    public final ArrayList<Menu> subMenus = new ArrayList<>();
+    public final ArrayList<Command> commands = new ArrayList<>();
 
-    public Menu(String name) {
-        this.name = name;
+    public Menu(String name, Menu parent) {
+        super(name, parent);
     }
 
     @SuppressWarnings("unchecked")
