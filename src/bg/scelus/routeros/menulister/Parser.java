@@ -2,7 +2,7 @@ package bg.scelus.routeros.menulister;
 
 import bg.scelus.routeros.menulister.models.Argument;
 import bg.scelus.routeros.menulister.models.Command;
-import bg.scelus.routeros.menulister.models.MenuItem;
+import bg.scelus.routeros.menulister.models.Menu;
 import com.jcraft.jsch.ChannelShell;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
@@ -23,7 +23,7 @@ public class Parser implements Runnable {
     private ChannelShell channel;
     private PrintWriter out;
     private BufferedReader in;
-    private MenuItem mainMenu = null;
+    private Menu mainMenu = null;
     private AbstractQueue<String> messages;
     private String promptString = null;
     private Pattern prompt = Pattern.compile("\\A\\[.+@.+\\] \\> .*\\z");
@@ -77,7 +77,7 @@ public class Parser implements Runnable {
      *
      * @return The generated main menu, or NULL if not generated yet.
      */
-    public MenuItem getMainMenu() {
+    public Menu getMainMenu() {
         return mainMenu;
     }
 
@@ -88,7 +88,7 @@ public class Parser implements Runnable {
      *
      * @return The full path to the menu, relative to the up most parent.
      */
-    public static String getFullPath(MenuItem menu) {
+    public static String getFullPath(Menu menu) {
         if (null != menu.parent) {
             return getFullPath(menu.parent) + " " + menu.name;
         } else {
@@ -163,15 +163,15 @@ public class Parser implements Runnable {
             promptString = clearPrompt;
             messages.add("Staring to parse.");
 
-            MenuItem rootMenu = new MenuItem("");
+            Menu rootMenu = new Menu("");
             rootMenu.summary = rosVersion.toString();
-            LinkedList<MenuItem> queue = new LinkedList<>();
+            LinkedList<Menu> queue = new LinkedList<>();
             LinkedList<Command> cmds = new LinkedList<>();
             LinkedList<Argument> args = new LinkedList<>();
             queue.add(rootMenu);
 
             while (!queue.isEmpty()) {
-                MenuItem item = queue.remove(0);
+                Menu item = queue.remove(0);
 //				if (!item.name.equals("main") && !item.name.equals("tool") && !item.name.equals("traffic-generator") && !item.name.equals("raw-packet-template"))
 //					continue;
                 queue.addAll(startList(item));
@@ -281,7 +281,7 @@ public class Parser implements Runnable {
 
         if (arg.isSpecial) {
             //Determine if empty or keyword
-            MenuItem cmdAsMenu = new MenuItem(arg.parent.name);
+            Menu cmdAsMenu = new Menu(arg.parent.name);
             cmdAsMenu.parent = arg.parent.parent;
             Command argAsCmd = new Command(arg.name, cmdAsMenu);
             parseCommand(fullArg.trim(), argAsCmd);
@@ -320,11 +320,10 @@ public class Parser implements Runnable {
         }
     }
 
-    protected void parseCommand(String fullCommand, Command command) throws IOException {
-        out.print(fullCommand + " ?");
-        out.flush();
+    protected ArrayList<String> getHelpResponse(String line) throws IOException {
 
-        messages.add("Parsing command \"" + fullCommand + "\"");
+        out.print(line + " ?");
+        out.flush();
         getResponse();
 
         ArrayList<String> response = getResponse();
@@ -335,7 +334,7 @@ public class Parser implements Runnable {
         out.flush();
         getResponse();
         getResponse();
-        if ((fullCommand.length() + promptString.length()) >= 79) {
+        if ((promptString.length() + line.length()) >= 79) {
             response = getResponse();
             response.remove(response.size() - 1);
             response.remove(response.size() - 1);
@@ -345,8 +344,13 @@ public class Parser implements Runnable {
         } else {
             getResponse();
         }
+        return response;
+    }
+
+    protected void parseCommand(String fullCommand, Command command) throws IOException {
+        messages.add("Parsing command \"" + fullCommand + "\"");
         Argument arg = null;
-        for (String line : response) {
+        for (String line : getHelpResponse(fullCommand)) {
             if (line.startsWith("[m[32m")) {
                 if (null != arg) {
                     if (arg.summary.endsWith("[m")) {
@@ -410,22 +414,15 @@ public class Parser implements Runnable {
         parseCommand(getFullPath(command), command);
     }
 
-    protected ArrayList<MenuItem> startList(MenuItem menu) throws IOException {
+    protected ArrayList<Menu> startList(Menu menu) throws IOException {
         String fullMenu = getFullPath(menu);
-
-        ArrayList<MenuItem> result = new ArrayList<>();
-
-        out.write(fullMenu + " ?");
-        out.flush();
         messages.add("Parsing menu \"" + fullMenu + "\"");
 
-        getResponse();
+        ArrayList<Menu> result = new ArrayList<>();
         boolean lastOneWasAMenu = true;
-        ArrayList<String> response = getResponse();
-        response.remove(response.size() - 1);
-        for (String line : response) {
+        for (String line : getHelpResponse(fullMenu)) {
             if (line.startsWith("[m[36m")) {
-                MenuItem item = new MenuItem(
+                Menu item = new Menu(
                         line.substring(
                                 "[m[36m".length(),
                                 line.indexOf("[m[33m")
@@ -473,7 +470,7 @@ public class Parser implements Runnable {
                     menu.description = menu.description + line;
                 } else {
                     if (lastOneWasAMenu) {
-                        MenuItem lastMenu = menu.subMenus.get(menu.subMenus.size() - 1);
+                        Menu lastMenu = menu.subMenus.get(menu.subMenus.size() - 1);
                         lastMenu.summary = lastMenu.summary + line;
                     } else {
                         Command lastCommand = menu.commands.get(menu.commands.size() - 1);
@@ -482,13 +479,6 @@ public class Parser implements Runnable {
                 }
             }
         }
-
-        //clear the line
-        out.print("\001\013");
-        out.flush();
-        getResponse();
-        getResponse();
-        getResponse();
 
         return result;
     }

@@ -4,16 +4,16 @@ import java.util.ArrayList;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
-public class MenuItem {
+public class Menu {
 
     public String name;
-    public MenuItem parent = null;
+    public Menu parent = null;
     public String summary = "";
     public String description = "";
-    public ArrayList<MenuItem> subMenus = new ArrayList<>();
+    public ArrayList<Menu> subMenus = new ArrayList<>();
     public ArrayList<Command> commands = new ArrayList<>();
 
-    public MenuItem(String name) {
+    public Menu(String name) {
         this.name = name;
     }
 

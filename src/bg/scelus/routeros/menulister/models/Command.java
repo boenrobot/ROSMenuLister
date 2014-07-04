@@ -7,12 +7,12 @@ import org.json.simple.JSONObject;
 public class Command {
 
     public String name;
-    public MenuItem parent;
+    public Menu parent;
     public String summary = "";
     public String description = "";
     public ArrayList<Argument> arguments = new ArrayList<>();
 
-    public Command(String name, MenuItem parent) {
+    public Command(String name, Menu parent) {
         this.name = name;
         this.parent = parent;
     }
