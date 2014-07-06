@@ -4,6 +4,7 @@ import bg.scelus.routeros.menulister.models.Argument;
 import bg.scelus.routeros.menulister.models.Command;
 import bg.scelus.routeros.menulister.models.Menu;
 import bg.scelus.routeros.menulister.models.MenuItem;
+import bg.scelus.routeros.menulister.models.ScriptingType;
 import com.jcraft.jsch.ChannelShell;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
@@ -15,6 +16,7 @@ import java.io.PrintWriter;
 import java.nio.CharBuffer;
 import java.util.AbstractQueue;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.concurrent.SynchronousQueue;
 import java.util.regex.Matcher;
@@ -49,14 +51,15 @@ public class Parser implements Runnable {
     }
 
     private final CharBuffer buff = CharBuffer.allocate(10240);
+    private final Pattern enumSeparator = Pattern.compile("(?:\\e\\[34;1m)?\\\"(?:[^\\\"\\\\]|\\\\.)*(?:\\\"|\\e\\[34;1m\\.\\.\\.)|\\S+");
+    private final String ansiClear = "\033[m";
+    private final ChannelShell channel;
+    private final PrintWriter out;
+    private final BufferedReader in;
+    private final AbstractQueue<String> messages;
 
     private Menu mainMenu = null;
     private String promptString = null;
-
-    private ChannelShell channel;
-    private PrintWriter out;
-    private BufferedReader in;
-    private AbstractQueue<String> messages;
 
     /**
      * Creates a parser instance.
@@ -264,11 +267,12 @@ public class Parser implements Runnable {
     }
 
     protected void startCommandList(Command command) throws IOException {
-        parseCommand(getFullPath(command) + " ", command);
+        String fullCommand = getFullPath(command);
+        messages.add("Parsing command \"" + fullCommand + "\"");
+        parseCommand(fullCommand + " ", command);
     }
 
     protected void parseCommand(String fullCommand, Command command) throws IOException {
-        messages.add("Parsing command \"" + fullCommand + "\"");
         Argument arg = null;
         for (String line : getResponseHelp(fullCommand)) {
             if (line.startsWith("[m[32m")) {
@@ -369,25 +373,106 @@ public class Parser implements Runnable {
             String line;
             for (int i = 0, l = response.size(); i < l; ++i) {
                 line = response.get(0);
-                if (line.startsWith("\033[m")) {
+                if (line.startsWith(ansiClear)) {
                     break;
                 }
                 description.append(line);
                 description.append('\n');
                 response.remove(0);
             }
-            //ArrayList<String> tabResponse = getResponseTab(fullArg + "=");
             arg.description = description.toString().trim();
+
+            ArrayList<String> enums = getResponseTab(fullArg + "=\"\\", 2);
+            promptLine = enums.remove(enums.size() - 1);
+            String promptLineResult = promptLine.substring(promptLine.indexOf("=") + 1);
+            arg.values.isScriptConstruct = promptLineResult.equals("\"\\    ");
+            if (arg.values.isScriptConstruct) {
+                if (getResponseTab(fullArg + "={").size() > 1) {
+                    arg.values.type.add(ScriptingType._CODE_);
+                    response.clear();
+                }
+            } else {
+                HashSet<String> argEnums = arg.values.enums;
+                if (promptLineResult.equals("\"\\")) {
+                    if (!enums.isEmpty()) {
+                        String firstEnum = enums.get(0);
+                        if (firstEnum.equals("[m[32mno  yes")) {
+                            argEnums.add("no");
+                            argEnums.add("yes");
+                            arg.values.type.add(ScriptingType.BOOL);
+                            enums.remove(0);
+                            response.clear();
+                        } else {
+                            if (firstEnum.startsWith("[m[34;1m") && firstEnum.contains(" ?")) {
+                                enums.clear();
+                            }
+                        }
+
+                        enums.stream().forEach((enumLine) -> {
+                            Matcher enumMatcher = enumSeparator.matcher(enumLine);
+                            while (enumMatcher.find()) {
+                                String match = enumMatcher.group();
+                                if (match.startsWith(ansiClear)) {
+                                    match = match.substring(ansiClear.length());
+                                }
+                                if (match.startsWith("\"") && match.endsWith("\"")) {
+                                    match = match.substring(1, match.length() - 1).replace("\\\"", "\"");
+                                }
+                                if (!match.isEmpty()) {
+                                    argEnums.add(match);
+                                }
+                            }
+                        });
+                    }
+                } else {
+                    promptLineResult = promptLineResult.trim();
+                    if (promptLineResult.startsWith("\"")) {
+                        promptLineResult = promptLineResult.substring(1);
+                        if (promptLineResult.contains("\"")) {
+                            promptLineResult = promptLineResult.substring(1, promptLineResult.lastIndexOf('"')).replace("\\\"", "\"");
+                        } else {
+                            promptLineResult = "";
+                        }
+                    } else {
+                        if (promptLineResult.contains(" ")) {
+                            promptLineResult = promptLineResult.substring(0, promptLineResult.indexOf(" "));
+                        }
+                    }
+                    if (!promptLineResult.isEmpty()) {
+                        argEnums.add(promptLineResult);
+                    }
+                }
+                if (!argEnums.isEmpty()) {
+                    response.clear();
+                }
+
+                enums = getResponseTab(fullArg + "=");
+                promptLine = enums.remove(enums.size() - 1);
+                promptLineResult = promptLine.substring(promptLine.indexOf("=") + 1);
+                arg.values.isNegatable = promptLineResult.equals("!");
+            }
         }
 
-        StringBuilder values = new StringBuilder();
+        StringBuilder rawHelp = new StringBuilder();
         response.forEach((String line) -> {
-            values.append(line);
-            values.append('\n');
+            rawHelp.append(line);
+            rawHelp.append('\n');
         });
-        String valuesString = values.toString().trim();
-        if (valuesString.length() > 0) {
-            arg.values = valuesString;
+        String rawString = rawHelp.toString().trim();
+
+        String simpleValPrefix = "[m\033[1m" + arg.name.replace("-", "") + "\033[m\033[33m -- \033[m";
+        if (rawString.equalsIgnoreCase(simpleValPrefix + "string value")) {
+            arg.values.type.add(ScriptingType.STR);
+            rawString = "";
+        }
+
+        if (rawString.equalsIgnoreCase(simpleValPrefix + "time interval")) {
+            arg.values.type.add(ScriptingType.TIME);
+            rawString = "";
+        }
+
+        if (!rawString.isEmpty()) {
+            arg.values.raw = rawString;
         }
     }
 
@@ -444,14 +529,17 @@ public class Parser implements Runnable {
     }
 
     protected ArrayList<String> getResponseTab(String line) throws IOException {
-        out.print(line + "\t");
+        return getResponseTab(line, 1);
+    }
+
+    protected ArrayList<String> getResponseTab(String line, int tabs) throws IOException {
+        out.print(line + new String(new char[tabs]).replace('\0', '\t'));
         out.flush();
 
         //clear the line
         out.print("\001\013");
         out.flush();
         ArrayList<String> response = getResponse();
-        response.remove(0);
         String lastPromptLine = response.remove(response.size() - 1);
         String promptLine = lastPromptLine;
         while (!lastPromptLine.equals(promptString)) {
@@ -460,6 +548,12 @@ public class Parser implements Runnable {
             lastPromptLine = response.remove(response.size() - 1);
         }
         getResponse();
+
+        if (promptLine.equals(promptString)) {
+            promptLine = promptLine + response.remove(0);
+        } else {
+            response.remove(0);
+        }
 
         while (!response.isEmpty() && response.get(response.size() - 1).endsWith("[K")) {
             response.remove(response.size() - 1);

@@ -99,9 +99,44 @@
                     "default": false
                 },
                 "values": {
+                    "$ref": "#/definitions/ArgumentValues"
+                }
+            }
+        },
+        "ArgumentValues": {
+            "description": "Parsed description of argument values.",
+            "type": "object",
+            "properties": {
+                "raw": {
                     "description": "Raw unparsed text from console's help, describing the possible values for the argument, or if the argument is a keyword (e.g. \"where\"), describes the first possible token.",
                     "type": "string",
                     "default": ""
+                },
+                "scriptConstruct": {
+                    "description": "Whether the argument's value affects overall scripting. This value might be a name of a variable to be introduced somewhere (e.g. the counter in \"for\" or the \"name\" of \":local\"), or the value might be an actual script to be executed at a point (e.g. most \"do\" arguments)",
+                    "type": "boolean",
+                    "default": false
+                },
+                "negatable": {
+                    "description": "Whether the argument's value can be prefixed with \"!\" to indicate negation.",
+                    "type": "boolean",
+                    "default": false
+                },
+                "type": {
+                    "description": "The RouterOS scripting type of this value, if detected.",
+                    "type": "array",
+                    "items": {
+                        "enum": ["(code)", "str", "bool", "num", "time", "ip", "ip-prefix", "ip6", "ip6-prefix"]
+                    },
+                    "uniqueItems": true
+                },
+                "enums": {
+                    "description": "The possible values for this argument, if detected.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "uniqueItems": true
                 }
             }
         }

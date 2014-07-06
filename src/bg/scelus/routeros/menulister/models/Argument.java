@@ -5,8 +5,8 @@ import org.json.simple.JSONObject;
 public class Argument extends Node {
 
     public final Command parent;
+    public final ArgumentValues values = new ArgumentValues();
 
-    public String values = null;
     public boolean isUnnamed = false;
     public boolean isSpecial = false;
 
@@ -36,8 +36,9 @@ public class Argument extends Node {
             result.put("special", isSpecial);
         }
 
-        if (null != values) {
-            result.put("values", values);
+        JSONObject valuesObj = values.getJSON();
+        if (!valuesObj.isEmpty()) {
+            result.put("values", valuesObj);
         }
 
         return result;
