@@ -51,7 +51,8 @@ public class Parser implements Runnable {
     }
 
     private final CharBuffer buff = CharBuffer.allocate(10240);
-    private final Pattern enumSeparator = Pattern.compile("(?:\\e\\[34;1m)?\\\"(?:[^\\\"\\\\]|\\\\.)*(?:\\\"|\\e\\[34;1m\\.\\.\\.)|\\S+");
+    private final String endOfEnumMark = "\033[34;1m...";
+    private final Pattern enumSeparator = Pattern.compile("(?:\\e\\[34;1m)?\\\"(?:[^\\\"\\\\]|\\\\.)*(?:\\\"|" + Pattern.quote(endOfEnumMark) + ")|\\S+");
     private final String ansiClear = "\033[m";
     private final ChannelShell channel;
     private final PrintWriter out;
@@ -408,7 +409,8 @@ public class Parser implements Runnable {
                             }
                         }
 
-                        enums.stream().forEach((enumLine) -> {
+                        while (!enums.isEmpty()) {
+                            String enumLine = enums.remove(0);
                             Matcher enumMatcher = enumSeparator.matcher(enumLine);
                             while (enumMatcher.find()) {
                                 String match = enumMatcher.group();
@@ -418,11 +420,17 @@ public class Parser implements Runnable {
                                 if (match.startsWith("\"") && match.endsWith("\"")) {
                                     match = match.substring(1, match.length() - 1).replace("\\\"", "\"");
                                 }
+                                if (match.endsWith(endOfEnumMark)) {
+                                    ArrayList<String> newEnums = getResponseTab(fullArg + "=" + match.substring(0, match.length() - endOfEnumMark.length()), 2);
+                                    newEnums.remove(newEnums.size() - 1);
+                                    enums.addAll(newEnums);
+                                    continue;
+                                }
                                 if (!match.isEmpty()) {
                                     argEnums.add(match);
                                 }
                             }
-                        });
+                        }
                     }
                 } else {
                     promptLineResult = promptLineResult.trim();
